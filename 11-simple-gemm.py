@@ -3,7 +3,6 @@ import cutlass.cute as cute
 from cutlass.cute.runtime import from_dlpack
 import torch
 
-
 @cute.kernel
 def gemm_kernel(A: cute.Tensor, B: cute.Tensor, C: cute.Tensor):
     tidx, tidy, _ = cute.arch.thread_idx()
@@ -28,8 +27,8 @@ def simple_gemm(A: cute.Tensor, B: cute.Tensor, C: cute.Tensor):
     M = cute.size(A, mode=[0])
     K = cute.size(A, mode=[1])
     N = cute.size(B, mode=[1])
-    grid = cute.ceil_div((M, N), (32, 32))
-    block = (32, 32, 1)
+    block = (32, 32)
+    grid = cute.ceil_div((M, N), block)
     cute.printf(grid)
 
     gemm_kernel(A, B, C).launch(
