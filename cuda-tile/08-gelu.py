@@ -8,7 +8,8 @@ def gelu_kernel(input, output, n: int, m: int, N_TILE: ct.Constant[int], M_TILE:
     bidy = ct.bid(1)
 
     input_tile = ct.load(input, index=(bidx, bidy), shape=(N_TILE, M_TILE))
-    output_tile = 0.5 * input_tile * (1 + ct.tanh(ct.sqrt(2 / math.pi) * (input_tile + 0.044715 * input_tile ** 3)))
+    # ct.sqrt(2 / math.pi) = 0.7978845608
+    output_tile = 0.5 * input_tile * (1 + ct.tanh(0.7978845608 * (input_tile + 0.044715 * input_tile ** 3)))
     ct.store(output, index=(bidx, bidy), tile=output_tile)
 
     
