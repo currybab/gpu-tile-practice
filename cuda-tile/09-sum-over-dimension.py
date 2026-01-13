@@ -2,7 +2,7 @@ import cuda.tile as ct
 import cupy
 
 @ct.kernel
-def sum_dim1_kernel(input, output, dim0: int, dim2: int, reduce_dim: int, REDUCE_TILE: ct.Constant[int], DIM2_TILE: ct.Constant[int]):
+def sum_dim_kernel(input, output, dim0: int, dim2: int, reduce_dim: int, REDUCE_TILE: ct.Constant[int], DIM2_TILE: ct.Constant[int]):
     # dim0, reduce, dim2 -> dim0, 1, dim2
     bidx = ct.bid(0)  # dim0 index
     bidy = ct.bid(1)  # reduce tile index
@@ -11,8 +11,10 @@ def sum_dim1_kernel(input, output, dim0: int, dim2: int, reduce_dim: int, REDUCE
     tile = ct.load(input, index=(bidx, bidy, bidz), shape=(1, REDUCE_TILE, DIM2_TILE))
     result = ct.sum(tile, axis=(0, 1))
 
-    dim0_idx = ct.zeros((DIM2_TILE,), dtype=ct.int32) + bidx
-    dim1_idx = ct.zeros((DIM2_TILE,), dtype=ct.int32)  # always 0
+    # ct.store(output, index=(bidx, bidy, bidz), tile=result)
+
+    dim0_idx = ct.full((DIM2_TILE,), bidx, ct.int32)
+    dim1_idx = ct.zeros((DIM2_TILE,), ct.int32)
     dim2_idx = bidz * DIM2_TILE + ct.arange(DIM2_TILE, dtype=ct.int32)
     ct.atomic_add(output, (dim0_idx, dim1_idx, dim2_idx), result)
 
@@ -38,7 +40,7 @@ def solution(input, dim: int, output, shape, ndim: int):
     ct.launch(
         cupy.cuda.get_current_stream(),
         grid,
-        sum_dim1_kernel,
+        sum_dim_kernel,
         (input_reshaped, output_flat, dim0, dim2, dim1, REDUCE_TILE, DIM2_TILE)
     )
 
