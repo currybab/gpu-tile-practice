@@ -6,3 +6,5 @@
 - [Elementwise Add tutorial](https://github.com/NVIDIA/cutlass/blob/main/examples/python/CuTeDSL/notebooks/elementwise_add.ipynb)
 - [You could have invented CuTe hierarchical layout (but maybe not the rest of it?)](https://blog.ezyang.com/2025/08/you-could-have-invented-cute-hierarchical-layout-but-maybe-not-the-rest-of-it/)
 - [CuTe Index To Coordinate](https://leimao.github.io/blog/CuTe-Index-To-Coordinate/)
+- [CuTe Layout Documentation in cpp](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/01_layout.html)
+- [CuTe Layout Algebra Documentation in cpp](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/02_layout_algebra.html)
