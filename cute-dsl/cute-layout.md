@@ -194,7 +194,7 @@ Index :  0  1  2  3  4  5  6  7
 이를 통해 단순한 행 우선이나 열 우선 이상의 다양한 레이아웃을 표현할 수 있다.
 또한 여전히 2D 좌표를 사용하여 인덱싱할 수 있다.
 
-### Layout Compatibility
+### Layout Compatibility (레이아웃 호환성)
 
 레이아웃 A의 shape가 레이아웃 B의 shape와 호환된다면, 레이아웃 A는 레이아웃 B와 호환된다고 한다. shape A가 shape B와 호환되려면 다음 조건을 만족해야 한다.
 
@@ -223,10 +223,112 @@ Index :  0  1  2  3  4  5  6  7
 - 반대칭성: A→B, B→A 둘 다 성립하면 A=B, 예) (24)→24 안됨, 24→(24) 됨
 - 추이성: A→B, B→C면 A→C, 예) 24→(4,6), (4,6)→((2,2),6) ⇒ 24→((2,2),6)
 
-### Layout Coordinates
+### Layout Coordinates (레이아웃 좌표)
 
+위의 호환성 개념에 따라, 모든 `Layout`은 여러 종류의 좌표를 수용할 수 있다. 
+모든 `Layout`은 자신과 호환되는 모든 `Shape`에 대한 좌표를 수용한다. 
+CuTe는 역사전식 순서(colexicographical order, 왼쪽에서 오른쪽으로 읽는 "사전식"과 달리 오른쪽에서 왼쪽으로 읽음)를 통해 이러한 좌표 집합 간의 매핑을 제공한다.
+
+따라서 모든 `Layout`은 두 가지 fundamental mapping을 제공한다.
+
+- `Shape`를 통해 입력 좌표를 그에 대응하는 자연 좌표(natural coordinate)로 매핑하는 것: 논리적으로 어떤 순서로 방문할지("몇 번째 요소?")
+- `Stride`를 통해 자연 좌표를 그에 대응하는 인덱스(index)로 매핑하는 것: 물리적으로 메모리 어디에 있는지("메모리 주소는?")
+
+즉, 입력 좌표의 순회 방식과 실제 메모리 접근 패턴은 별개이다.
+
+#### 좌표 매핑 (Coordinate Mapping)
+
+입력 좌표에서 자연 좌표로의 매핑은 `Shape` 내에서 역사전식 순서를 적용한 것이다. 
+여기서 역사전식 순서는 column-major order와 유사하다. 사전식 순서는 row-major order라고 생각하면 된다.
+
+예를 들어 `Shape` (3,(2,3)) 를 살펴보면, 이 `Shape`는 세 가지 좌표 집합을 가진다. 1차원 좌표, 2차원 좌표, 그리고 자연(h-D) 좌표 
+
+![coordinate mapping table](https://img.buidl.day/blog/cute-dsl-layout-coordinates.png)
+
+형태 (3,(2,3))에 대한 각 좌표는 두 개의 동등한 좌표를 가지며, 모든 동등한 좌표는 동일한 자연 좌표로 매핑된다. 
+위의 모든 좌표가 유효한 입력이므로, 형태 (3,(2,3))을 가진 레이아웃은 1차원 좌표를 사용하여 18개 요소의 1차원 배열처럼, 2차원 좌표를 사용하여 3x6 요소의 2차원 행렬처럼, 또는 h차원(자연) 좌표를 사용하여 3x(2x3) 요소의 h차원 텐서처럼 사용할 수 있다.
+이 세 좌표가 "서로 같은 원소 집합을 다른 방식으로 인덱싱한 것"임을 보여준다.
+
+이전의 1차원 출력은 CuTe가 2차원 좌표의 역사전식 순서를 통해 1차원 좌표를 식별하는 방법을 보여준다. 
+i = 0 에서 size(layout)까지 반복하며 단일 정수 좌표 i 로 레이아웃을 인덱싱하면, 레이아웃이 좌표를 행 우선(row-major) 방식이나 더 복잡한 방식으로 인덱스에 매핑하더라도 이 "일반화된 열 우선(generalized-column-major)" 순서로 2차원 좌표를 탐색하게 된다.
+
+함수 `cute.idx2crd(idx, shape)`는 좌표 매핑을 담당한다. 이 함수는 형태 내의 임의의 좌표를 가져와 해당 형태에 대한 동등한 자연 좌표를 계산합니다.
+
+레이아웃의 `Stride`가 어떻든 상관없이, 1차원 정수 i로 순회하면 CuTe는 항상 역사전식(column-major)으로 좌표를 탐색한다.
+이러한 분리 덕분에 알고리즘 코드는 그대로 두고, Stride만 바꾸면 다른 메모리 레이아웃에 적용할 수 있다.
+
+#### 인덱스 매핑 (Index Mapping)
+
+자연 좌표에서 인덱스로의 매핑은 자연 좌표와 `Layout`의 `Stride`를 내적하여 수행된다.
+
+레이아웃 `(3,(2,3)):(3,(12,1))`을 예로 들어보면 내적 좌표 `(i,(j,k))`는 인덱스 `i*3 + j*12 + k*1`이 된다. 
+이 레이아웃이 계산하는 인덱스는 아래의 2차원 표에 표시되어 있으며, 여기서 `i`는 행 좌표로, `(j,k)`는 열 좌표로 사용된다.
+
+```
+       0     1     2     3     4     5     <== 1-D col coord
+     (0,0) (1,0) (0,1) (1,1) (0,2) (1,2)   <== 2-D col coord (j,k)
+    +-----+-----+-----+-----+-----+-----+
+ 0  |  0  |  12 |  1  |  13 |  2  |  14 |
+    +-----+-----+-----+-----+-----+-----+
+ 1  |  3  |  15 |  4  |  16 |  5  |  17 |
+    +-----+-----+-----+-----+-----+-----+
+ 2  |  6  |  18 |  7  |  19 |  8  |  20 |
+    +-----+-----+-----+-----+-----+-----+
+```
+
+함수 `cute.crd2idx(c, layout)`은 인덱스 매핑을 담당한다. 
+이 함수는 shape 내의 임의의 좌표를 받아 해당 shape에 상응하는 자연 좌표를 계산하고(아직 계산되지 않은 경우), stride와의 내적을 계산한다.
+
+### Layout Manipulation (레이아웃 조작)
+
+- 서브레이아웃 (sublayouts)
+  - `cute.get(layout, mode=[I...])`
+  - `cute.select(layout, mode=[I...])`
+- 결합 (concatenation)
+  - `cute.append(layout1, layout2)`: layout2를 layout1 뒤에 붙임
+  - `cute.prepend(layout1, layout2)`: layout2를 layout1 앞에 붙임
+
+```python
+a = cute.make_layout(3, stride=1) # a: 3:1
+b = cute.make_layout(4, stride=3) # b: 4:3
+ab = cute.append(a, b) # ab: (3,4):(1,3)
+ba = cute.prepend(a, b) # ba: (4,3):(3,1)
+c = cute.append(ab, ab) # c: (3,4,(3,4)):(1,3,(1,3))
+```
+
+- 그룹화 및 평탄화 (grouping and flattening)
+  - `cute.group_modes(layout, begin, end)`: begin부터 end(미포함)까지의 모드들을 그룹화하여 새로운 레이아웃을 생성
+  - `cute.flatten(layout)`: 레이아웃을 평탄화하여 1차원으로 만듬
+  - 모드를 그룹화, 평탄화 및 재정렬함으로써 텐서를 행렬로, 행렬을 벡터로, 벡터를 행렬로 변환하는 등 텐서를 제자리에서 재해석할 수 있다.
+
+```python
+a = cute.make_ordered_layout((2, 3, 5, 7), (0, 1, 2, 3)) # a: (2,3,5,7):(1,2,6,30)
+b = cute.group_modes(a, 0, 2) # b: ((2,3),5,7):((1,2),6,30)
+c = cute.group_modes(b, 1, 3) # c: ((2,3),(5,7)):((1,2),(6,30))
+f = cute.flatten(b) # f: (2,3,5,7):(1,2,6,30)
+e = cute.flatten(c) # e: (2,3,5,7):(1,2,6,30)
+```
+
+- 슬라이싱 (slicing)
+  - `Layout`도 slicing 연산이 가능하지만 `Tensor`에서 수행하는 것을 권장한다.
+
+
+# Cute Layout Algebra
+
+CuTe는 레이아웃을 다양한 방식으로 결합할 수 있도록 지원하는 "Layout 대수"를 제공한다. 이 대수에는 다음과 같은 연산들이 포함된다.
+
+- Layout 함수형 합성 (Layout functional composition)
+- 하나의 레이아웃을 다른 레이아웃에 따라 복제하는 Layout "곱(product)" 개념
+- 하나의 레이아웃을 다른 레이아웃에 따라 분할하는 Layout "나눗셈(divide)" 개념
+
+단순한 레이아웃으로부터 복잡한 레이아웃을 구축하기 위한 일반적인 유틸리티들은 Layout 곱에 의존한다. 
+레이아웃(예: 데이터 레이아웃)을 다른 레이아웃(예: 스레드 레이아웃)에 걸쳐 파티셔닝하기 위한 일반적인 유틸리티들은 Layout 나눗셈에 의존한다. 
+이러한 모든 유틸리티는 Layout의 함수형 합성을 기반으로 한다.
+
+이 모든걸 관통하는 핵심 관점은 "Layouts are functions from integers to integers."이다.
 
 
 
 ### 참고 문헌
 - [CuTe Layout](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/01_layout.html)
+- [CuTe Layout Algebra](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/02_layout_algebra.html)

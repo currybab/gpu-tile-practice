@@ -121,4 +121,128 @@ def layout_test():
 
     #######################################################
 
+    cute.printf("s2xh4_col 1D index map with idx2crd:") # (2,(2,2)):(1,(2,4))
+    for i in range(cute.size(s2xh4_col)):
+        cute.printf("1-D {} = h-D {}", i, cute.idx2crd(i, s2xh4_col.shape))
+
+    """
+    1-D 0 = h-D (0,(0,0))
+    1-D 1 = h-D (1,(0,0))
+    1-D 2 = h-D (0,(1,0))
+    1-D 3 = h-D (1,(1,0))
+    1-D 4 = h-D (0,(0,1))
+    1-D 5 = h-D (1,(0,1))
+    1-D 6 = h-D (0,(1,1))
+    1-D 7 = h-D (1,(1,1))
+    """
+
+    cute.printf("s2xh4_col 2D index map with idx2crd:") # (2,(2,2)):(1,(2,4))
+    for j in range(cute.size(s2xh4_col, mode=[1])):
+        for i in range(cute.size(s2xh4_col, mode=[0])):
+            cute.printf("2-D ({}, {}) = h-D {}", i, j, cute.idx2crd((i, j), s2xh4_col.shape))
+
+    """
+    2-D (0, 0) = h-D (0,(0,0))
+    2-D (1, 0) = h-D (1,(0,0))
+    2-D (0, 1) = h-D (0,(1,0))
+    2-D (1, 1) = h-D (1,(1,0))
+    2-D (0, 2) = h-D (0,(0,1))
+    2-D (1, 2) = h-D (1,(0,1))
+    2-D (0, 3) = h-D (0,(1,1))
+    2-D (1, 3) = h-D (1,(1,1))
+    """
+
+    #######################################################
+
+    cute.printf("s2xh4_col 1D index map with crd2idx:") # (2,(2,2)):(1,(2,4))
+    for i in range(cute.size(s2xh4_col)):
+        cute.printf("1-D {} = index {}", i, cute.crd2idx(i, s2xh4_col))
+
+    """
+    1-D 0 = index 0
+    1-D 1 = index 1
+    1-D 2 = index 2
+    1-D 3 = index 3
+    1-D 4 = index 4
+    1-D 5 = index 5
+    1-D 6 = index 6
+    1-D 7 = index 7
+    """    
+
+    cute.printf("s2xh4_row 1D index map with crd2idx:") # (2,(2,2)):(4,(2,1))
+    for i in range(cute.size(s2xh4_row)):
+        cute.printf("1-D {} = index {}", i, cute.crd2idx(i, s2xh4_row))
+
+    """
+    1-D 0 = index 0
+    1-D 1 = index 4
+    1-D 2 = index 2
+    1-D 3 = index 6
+    1-D 4 = index 1
+    1-D 5 = index 5
+    1-D 6 = index 3
+    1-D 7 = index 7
+    """
+
+    #######################################################
+    # sublayout
+    a = cute.make_ordered_layout((4, (3, 6)), (0, (1, 2)))
+    a0 = cute.get(a, mode=[0])
+    a1 = cute.get(a, mode=[1])
+    a10 = cute.get(a, mode=[1, 0])
+    a11 = cute.get(a, mode=[1, 1])
+    cute.printf("a: {}", a)  # a: (4,(3,6)):(1,(4,12))
+    cute.printf("a0: {}", a0)  # a0: 4:1
+    cute.printf("a1: {}", a1)  # a1: (3,6):(4,12)
+    cute.printf("a10: {}", a10)  # a10: 3:4
+    cute.printf("a11: {}", a11)  # a11: 6:12
+
+    a = cute.make_ordered_layout((2, 3, 5, 7), (0, 1, 2, 3))
+    a13 = cute.select(a, mode=[1, 3])
+    a01 = cute.select(a, mode=[0, 1, 3])
+    a2 = cute.select(a, mode=[2])
+    cute.printf("a: {}", a)  # a: (2,3,5,7):(1,2,6,30)  
+    cute.printf("a13: {}", a13)  # a13: (3,7):(2,30)
+    cute.printf("a01: {}", a01)  # a01: (2,3,7):(1,2,30)
+    cute.printf("a2: {}", a2)  # a2: (5):(6)
+
+    #######################################################
+    # concatenation
+    a = cute.make_layout(3, stride=1)
+    b = cute.make_layout(4, stride=3)
+    cute.printf("a: {}", a) # a: 3:1
+    cute.printf("b: {}", b) # b: 4:3
+    row = cute.append(a, b)
+    cute.printf("row: {}", row) # row: (3,4):(1,3)
+    col = cute.append(b, a)
+    cute.printf("col: {}", col) # col: (4,3):(3,1)
+    ab = cute.append(a, b)
+    ba = cute.prepend(a, b)
+    cute.printf("ab: {}", ab) # ab: (3,4):(1,3)
+    cute.printf("ba: {}", ba) # ba: (4,3):(3,1)
+    c = cute.append(ab, ab)
+    cute.printf("c: {}", c) # c: (3,4,(3,4)):(1,3,(1,3))
+
+    #######################################################
+    # Grouping and flattening
+    a = cute.make_ordered_layout((2, 3, 5, 7), (0, 1, 2, 3))
+    cute.printf("a: {}", a) # a: (2,3,5,7):(1,2,6,30)
+    b = cute.group_modes(a, 0, 2)
+    cute.printf("b: {}", b) # b: ((2,3),5,7):((1,2),6,30)
+    c = cute.group_modes(b, 1, 3)
+    cute.printf("c: {}", c) # c: ((2,3),(5,7)):((1,2),(6,30))
+    f = cute.flatten(b)
+    cute.printf("f: {}", f) # f: (2,3,5,7):(1,2,6,30)
+    e = cute.flatten(c)
+    cute.printf("e: {}", e) # e: (2,3,5,7):(1,2,6,30)
+
+
+
+    #######################################################
+    # Slicing
+
+
+
+    
+
 layout_test()
