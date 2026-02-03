@@ -327,6 +327,84 @@ CuTe는 레이아웃을 다양한 방식으로 결합할 수 있도록 지원하
 
 이 모든걸 관통하는 핵심 관점은 "Layouts are functions from integers to integers."이다.
 
+## Coalesce (병합)
+
+`coalesce`는 (대체로) "연속적으로 합칠 수 있는 모드들을 합쳐서" 더 단순한 레이아웃으로 만든다.
+입력 정수값만 고려한다면, `Layout`을 함수로서 변경하지 않고도 그 형태(shape)와 모드(mode)의 개수를 조작할 수 있다.
+`coalesce`가 유일하게 변경할 수 없는 것은 `Layout`의 `size`이다.
+
+```python
+a = cute.make_layout((2, (1, 6)), stride=(1, (6, 2)))
+result = cute.coalesce(a) # result: 12:1
+```
+
+여기서 결과의 모드(mode) 수가 더 적고 "더 단순함"을 확인할 수 있다. 
+실제로 이는 (동적으로 수행되는 경우) 좌표 매핑 및 인덱스 매핑에서 몇 가지 연산을 절약할 수 있게 해준다.
+
+### coalesce의 조건
+
+- 병합 조건: 두 모드가 합쳐지려면 앞 모드의 (`shape` × `stride`) = 뒷 모드의 `stride`여야 한다. 
+즉, 앞 모드가 끝나는 지점에서 뒷 모드가 바로 이어져야 연속성이 보장된다. column-major `Layout`이 해당 조건을 만족할 수 있다.
+
+- 무시 조건: size가 1인 모드는 stride에 관계없이 무시된다.
+
+레이아웃의 모드들을 "병합(coalesce)"하기 위해, 어떤 레이아웃이든 평탄화(flatten)한 후 인접한 각 모드 쌍에 대해 위의 이항 연산을 적용할 수 있다.
+
+위의 예제에서 모드 1-0의 크기가 1이므로 무시되고 남은 `Layout`은 (2,6):(1,2)로 모드 0의 (`shape` × `stride`) = 모드 1의 `stride`를 만족한다.
+따라서 병합되어 12:1로 결과가 나온다.
+
+### by-mode coalesce (모드별 병합)
+
+결과 랭크(예: 2-D 유지) 같은 걸 유지하고 싶을 때 `target_profile`을 받는다.
+
+```python
+result2 = cute.coalesce(layout, target_profile=(1,2)) # result2: (2,6):(1,2)
+result3 = cute.coalesce(layout, target_profile=(1,(2,3))) # result3: (2,(1,6)):(1,(0,2))
+result4 = cute.coalesce(layout, target_profile=(1,)) # result4: (2,(1,6)):(1,(6,2))
+result5 = cute.coalesce(layout, target_profile=(1,1)) # result5: (2,6):(1,2)
+```
+
+`target_profile` 안의 값은 어떤 정수 값이든 상관없고, 튜플의 길이가 원본 구조와 일치해야 coalesce가 작동한다.
+
+## Composition (합성)
+
+`composition(A, B)`는 B로 좌표를 인덱스로 변환하고, 그 인덱스를 A의 좌표로 사용해서 최종 인덱스를 얻는다.
+
+```
+Functional composition, R := A ∘ B
+R(c) := (A ∘ B)(c) := A(B(c))
+```
+
+`A = (6,2):(8,2)`, `B = (4,3):(3,1)`로 예를 들어보면, 다음과 같이 composition 된다.
+
+```
+R( 0) = A(B( 0)) = A(B(0,0)) = A( 0) = A(0,0) =  0
+R( 1) = A(B( 1)) = A(B(1,0)) = A( 3) = A(3,0) = 24
+R( 2) = A(B( 2)) = A(B(2,0)) = A( 6) = A(0,1) =  2
+R( 3) = A(B( 3)) = A(B(3,0)) = A( 9) = A(3,1) = 26
+R( 4) = A(B( 4)) = A(B(0,1)) = A( 1) = A(1,0) =  8
+R( 5) = A(B( 5)) = A(B(1,1)) = A( 4) = A(4,0) = 32
+R( 6) = A(B( 6)) = A(B(2,1)) = A( 7) = A(1,1) = 10
+R( 7) = A(B( 7)) = A(B(3,1)) = A(10) = A(4,1) = 34
+R( 8) = A(B( 8)) = A(B(0,2)) = A( 2) = A(2,0) = 16
+R( 9) = A(B( 9)) = A(B(1,2)) = A( 5) = A(5,0) = 40
+R(10) = A(B(10)) = A(B(2,2)) = A( 8) = A(2,1) = 18
+R(11) = A(B(11)) = A(B(3,2)) = A(11) = A(5,1) = 42
+```
+
+놀라운 관찰은 위에서 정의된 `R(c) = k` 함수가 또 다른 `Layout`으로 작성될 수 있다는 것이다.
+위에서 `R = ((2,2),3):((24,2), 8)`로 표현할 수 있다.
+
+그리고 `B`와 `R`은 compatible하다. 즉, `B`의 모든 좌표는 `R`의 좌표로서도 사용될 수 있다. 이는 `B`가 `R`의 정의역을 정의하기 때문에 함수 합성의 예상되는 속성이다.
+
+Composition을 "레이아웃 변형"으로 이해해보자. A가 "메모리에서의 실제 접근 패턴", B가 "좌표를 어떤 방식으로 재배열/재해석할지" 라고 보면,	A ∘ B는 "좌표계를 먼저 B로 바꾼 다음 그 좌표를 A로 메모리 인덱스로 바꾸는 것"이 된다.
+
+즉, `reshape`/`transpose`/`tile` 같은 작업을 데이터 이동 없이 표현할 수 있는 수단이 된다.
+
+### Computing Composition (컴포지션 계산)
+
+
+
 
 
 ### 참고 문헌

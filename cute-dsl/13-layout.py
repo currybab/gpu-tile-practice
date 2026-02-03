@@ -239,7 +239,32 @@ def layout_test():
 
 
     #######################################################
-    # Slicing
+    # Coalesce
+    layout = cute.make_layout((2, (1, 6)), stride=(1, (6, 2)))
+    result = cute.coalesce(layout)
+    cute.printf("coalesce: {}", result)
+
+    result2 = cute.coalesce(layout, target_profile=(1,2))
+    cute.printf("coalesce2: {}", result2)
+
+    result3 = cute.coalesce(layout, target_profile=(1,(2,3)))
+    cute.printf("coalesce3: {}", result3)
+
+
+    result4 = cute.coalesce(layout, target_profile=(1,))
+    cute.printf("coalesce4: {}", result4)
+
+    result5 = cute.coalesce(layout, target_profile=(1,1))
+    cute.printf("coalesce5: {}", result5)
+
+    #######################################################
+    # Composition
+
+    a = cute.make_layout((6, 2), stride=(8, 2))
+    b = cute.make_layout((4, 3), stride=(3, 1))
+    result = cute.composition(a, b)
+    cute.printf("composition: {}", result)
+
 
 
 
