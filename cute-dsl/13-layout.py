@@ -242,20 +242,20 @@ def layout_test():
     # Coalesce
     layout = cute.make_layout((2, (1, 6)), stride=(1, (6, 2)))
     result = cute.coalesce(layout)
-    cute.printf("coalesce: {}", result)
+    cute.printf("coalesce: {}", result) # 12:1
 
     result2 = cute.coalesce(layout, target_profile=(1,2))
-    cute.printf("coalesce2: {}", result2)
+    cute.printf("coalesce2: {}", result2) # (2,6):(1,2)
 
     result3 = cute.coalesce(layout, target_profile=(1,(2,3)))
-    cute.printf("coalesce3: {}", result3)
+    cute.printf("coalesce3: {}", result3) # (2,(1,6)):(1,(0,2))
 
 
     result4 = cute.coalesce(layout, target_profile=(1,))
-    cute.printf("coalesce4: {}", result4)
+    cute.printf("coalesce4: {}", result4) # (2,(1,6)):(1,(6,2))
 
     result5 = cute.coalesce(layout, target_profile=(1,1))
-    cute.printf("coalesce5: {}", result5)
+    cute.printf("coalesce5: {}", result5) # (2,6):(1,2)
 
     #######################################################
     # Composition
@@ -263,30 +263,35 @@ def layout_test():
     a = cute.make_layout((6, 2), stride=(8, 2))
     b = cute.make_layout((4, 3), stride=(3, 1))
     result = cute.composition(a, b)
-    cute.printf("composition: {}", result)
+    cute.printf("composition: {}", result) # ((2,2),3):((24,2),8)
 
     a = cute.make_layout(6, stride=2)
     b = cute.make_layout(4, stride=3)
     result = cute.composition(a, b)
-    cute.printf("composition test: {}", result)
+    cute.printf("composition test: {}", result) # 4:6
 
     a = cute.make_layout((12, (4, 8)), stride=(59, (13, 1)))
     tiler = (cute.make_layout(3, stride=4), cute.make_layout(8, stride=2))
     r = cute.composition(a, tiler)
-    cute.printf("composition test2: {}", r)
+    cute.printf("composition test2: {}", r) # (3,(2,4)):(236,(26,1))
     r2 = cute.composition(a[0], tiler[0])
     r3 = cute.composition(a[1], tiler[1])
-    cute.printf("composition test2: {}", r2)
-    cute.printf("composition test2: {}", r3)
-    cute.printf("composition test2: {}", cute.make_layout((r2.shape, r3.shape), stride=(r2.stride, r3.stride)))
+    cute.printf("composition test2: {}", r2) # 3:236
+    cute.printf("composition test2: {}", r3) # (2,4):(26,1)
+    cute.printf("composition test2: {}", cute.make_layout((r2.shape, r3.shape), stride=(r2.stride, r3.stride))) # (3,(2,4)):(236,(26,1))
 
 
     a = cute.make_layout((12,(4,8)), stride= (59,(13,1)))
     tiler = (3, 8)
     result = cute.composition(a, tiler)
-    cute.printf("composition test3: {}", result)
+    cute.printf("composition test3: {}", result) # (3,(4,2)):(59,(13,1))
 
+    #######################################################
+    # Complement
 
+    cute.printf("complement test1: {}", cute.complement(cute.make_layout(4, stride=1), 24)) # 6:4
+
+    #######################################################
 
 
 
