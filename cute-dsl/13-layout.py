@@ -265,6 +265,30 @@ def layout_test():
     result = cute.composition(a, b)
     cute.printf("composition: {}", result)
 
+    a = cute.make_layout(6, stride=2)
+    b = cute.make_layout(4, stride=3)
+    result = cute.composition(a, b)
+    cute.printf("composition test: {}", result)
+
+    a = cute.make_layout((12, (4, 8)), stride=(59, (13, 1)))
+    tiler = (cute.make_layout(3, stride=4), cute.make_layout(8, stride=2))
+    r = cute.composition(a, tiler)
+    cute.printf("composition test2: {}", r)
+    r2 = cute.composition(a[0], tiler[0])
+    r3 = cute.composition(a[1], tiler[1])
+    cute.printf("composition test2: {}", r2)
+    cute.printf("composition test2: {}", r3)
+    cute.printf("composition test2: {}", cute.make_layout((r2.shape, r3.shape), stride=(r2.stride, r3.stride)))
+
+
+    a = cute.make_layout((12,(4,8)), stride= (59,(13,1)))
+    tiler = (3, 8)
+    result = cute.composition(a, tiler)
+    cute.printf("composition test3: {}", result)
+
+
+
+
 
 
 
