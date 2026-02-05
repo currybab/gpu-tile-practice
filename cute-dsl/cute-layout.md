@@ -489,7 +489,7 @@ same_r = cute.make_layout((r2.shape, r3.shape), stride=(r2.stride, r3.stride)) #
 ```
 
 위 코드의 result 는 아래 그림에서 강조 표시된 원본 레이아웃의 3x8 하위 레이아웃으로 표현될 수 있다.
-하위 레이아웃 연결 표기법 (LayoutA, LayoutB, ...) 과 Tiler 를 구분하기 위해 종종 <LayoutA, LayoutB, ...> 표기법을 사용했다.
+하위 레이아웃 연결 표기법 (LayoutA, LayoutB, ...) 과 `Tiler`를 구분하기 위해 종종 <LayoutA, LayoutB, ...> 표기법을 사용했다.
 
 ![composition1](https://img.buidl.day/blog/cute-layout-composition1.png)
 
@@ -536,11 +536,190 @@ complement가 바로 이 역할을 한다.
 complement는 원래 레이아웃(다른 색상으로 표시)을 "반복"하여 결과의 공역 크기가 24가 되게 한다. 
 complement의 결과 layout인 (3,2):(2,12)은 "반복의 레이아웃"으로 볼 수 있다.
 
+## Divide (Tiling)
+
+이제, 하나의 `Layout`을 다른 `Layout`으로 나누는 연산을 정의할 수 있다. 
+레이아웃을 여러 구성 요소로 나누는 함수는 레이아웃의 타일링(tiling) 및 파티셔닝(partitioning)을 위한 토대로 유용하다.
+
+이 섹션에서는 모든 `Layout`을 정수에서 정수로 가는 1차원 함수로 간주하는 `logical_divide(Layout, Layout)`를 정의하고, 해당 정의를 사용하여 다차원 `Layout` 분할을 생성할 것이다.
+`logical_divide(A, B)`는 레이아웃 `A`를 두 개의 모드로 나눈다. 
+첫 번째 모드에는 `B`가 가리키는 모든 요소가 포함되고, 두 번째 모드에는 `B`가 가리키지 않는 모든 요소가 포함된다.
+
+형식적으로는 다음과 같이 표현된다.
+
+$$A \oslash B := A \circ (B,B^*)$$
+
+그리고 다음과 같이 구현된다.
+
+```python
+def logical_divide(layout, tiler):
+  complement_tiler = cute.complement(tiler, cute.size(layout))
+  tiler_layout = cute.make_layout(
+    (tiler.shape, complement_tiler.shape), 
+    stride=(tiler.stride, complement_tiler.stride),
+  )
+  return cute.composition(layout, tiler_layout);
+```
+
+오직 연결(concatenation), 합성(composition), 보수(complement)의 관점에서만 정의된다.
+
+### 논리적 분할 1차원 예시
+
+1차원 레이아웃 `A = (4,2,3):(2,1,8)`을 타일러 `B = 4:2`로 타일링하는 경우를 생각해 보자. 
+이는 A 에 의해 정의된 특정 저장 순서로 배치된 24개 요소의 1차원 벡터가 있고, 여기서 2의 스트라이드(stride)를 가진 4개 요소의 타일을 추출하려는 것을 의미한다.
+이는 위 구현 섹션에서 설명한 세 단계에 따라 계산된다.
+
+1. `size(A) = 24`에 대한 `B = 4:2`의 보수(Complement)는 `B* = (2,3):(1,8)`이다.
+2. `B`와 `B*`를 연결하여 `B_layout = (4,(2,3)):(2,(1,8))`을 생성한다.
+3. `A`와 `B_layout`의 합성(Composition)은 `((2,2),(2,3)):((4,1),(2,8))`이다.
+
+```
+마지막 합성 과정의 왼쪽을 계산해보자.
+`A = (4,2,3):(2,1,8)`과 `B = 4:2`의 합성은 먼저 `stride=2` 나눗셈을 통해 `(2,2,3):(4,1,8)`을 얻는다.
+그리고 `shape=4`를 맞추기 위해 `(2,2,1):(4,1,8)`을 얻는다.
+coalsceing을 적용하여 `(2,2,1):(4,1,8)`을 `(2,2):(4,1)`으로 변환한다.
+```
+
+![divide1](https://img.buidl.day/blog/cute-dsl-layout-algebra-divide1.png)
+
+위 그림은 `A`를 1차원 레이아웃으로 묘사하며, `B`가 가리키는 요소들은 회색으로 강조되어 있다. 
+레이아웃 `B`는 데이터의 "타일"을 설명하며, `A`에는 각 색상으로 표시된 여섯 개의 타일이 존재한다. 
+분할 후, 결과의 첫 번째 모드는 데이터 타일이며 두 번째 모드는 각 타일을 순회한다.
+
+### 논리적 분할 2D 예시
+
+2D 레이아웃 `A = (9,(4,8)):(59,(13,1))`이 있고 열 방향(모드-0)으로 `3:3`를, 행 방향(모드-1)으로 `(2,4):(1,8)`를 적용하려 한다. 
+이는 타일러(tiler)를 `B = <3:3, (2,4):(1,8)>`과 같이 작성할 수 있음을 의미한다.
+
+![divide2](https://img.buidl.day/blog/cute-dsl-layout-algebra-divide2.png)
+
+위 그림은 `A`를 2D 레이아웃으로 묘사하며, `B`가 가리키는 요소들을 회색으로 강조되어 있다. 
+레이아웃 `B`는 데이터의 "타일"을 설명하며, `A`에는 각 색상으로 표시된 12개의 타일이 존재한다.
+분할 후, 결과의 각 모드 중 첫 번째 모드는 데이터 타일이 되고, 각 모드의 두 번째 모드는 각 타일을 순회한다. 
+이러한 관점에서 이 연산은 흩어져 있던 같은 타일의 원소들이 연속된 좌표로 모이기 때문에 일종의 `gather` 연산 또는 단순히 행과 열에 대한 순열로 볼 수 있다.
 
 
+### Zipped, Tiled, Flat Divides
 
+어떤 형상(shape)의 `Layout`과 `Tiler`가 있다고 가정할 때, 각 연산은 `logical_divide`를 적용하지만 잠재적으로 모드들을 더 편리한 형태로 재배열 한다.
+
+```
+Layout Shape : (M, N, L, ...)
+Tiler Shape  : <TileM, TileN>
+
+logical_divide : ((TileM,RestM), (TileN,RestN), L, ...)
+zipped_divide  : ((TileM,TileN), (RestM,RestN,L,...))
+tiled_divide   : ((TileM,TileN), RestM, RestN, L, ...)
+flat_divide    : (TileM, TileN, RestM, RestN, L, ...)
+```
+
+## Product (Tiling)
+
+마지막으로, 레이아웃과 다른 레이아웃의 곱을 정의할 수 있다.
+이 섹션에서는 모든 `Layout`을 정수에서 정수로의 1차원 함수로 간주하는 `logical_product(Layout, Layout)`를 정의한 다음, 해당 정의를 사용하여 다차원 Layout 곱을 생성할 것이다.
+`logical_product(A, B)`는 두 개의 모드를 가진 레이아웃을 결과로 내놓으며, 여기서 첫 번째 모드는 레이아웃 A이고 두 번째 모드는 레이아웃 B이지만 각 요소가 레이아웃 A의 "고유한 복제"로 대체된 형태이다.
+
+형식적으로는 다음과 같이 표현된다.
+
+$$A \otimes B := (A, A^* \circ B)$$
+
+그리고 다음과 같이 구현된다.
+
+```python
+def logical_product(layout, tiler):
+  complement_layout = cute.complement(layout, cute.size(layout)*cute.cosize(tiler))
+  composition_layout = cute.composition(complement_layout, tiler)
+  return cute.make_layout(
+    (layout.shape, composition_layout.shape), 
+    stride=(layout.stride, composition_layout.stride)
+  )
+```
+
+마찬가지로 오직 연결(concatenation), 합성(composition), 보수(complement)의 관점에서만 정의된다.
+
+### 논리적 곱 1차원 예시
+
+`B = 6:1` 에 따라 1D 레이아웃 `A = (2,2):(4,1)`을 재현해보자.
+이는 A로 정의된 4개 요소의 1D 레이아웃이 있고 이를 6번 재현하려는 것을 의미한다.
+
+1. `cosize(B)=6`, `size(A)=4`이므로 24에 대한 A의 complement는  `A* = (2,3):(2,8)`이다.
+2. `A*`과 `B`의 Composition은 `(2,3):(2,8)`이다.
+3. concatenation을 통해 `(2,2):(4,1)`과 `(2,3):(2,8)`을 연결하여 `((2,2),(2,3)):((4,1),(2,8))`을 얻는다.
+
+![product1](https://img.buidl.day/blog/cute-dsl-layout-algebra-product1.png)
+
+위 그림은 레이아웃 A와 B를 1차원 레이아웃으로 묘사한다. 
+레이아웃 B는 A가 반복되는 횟수와 순서를 설명하며, 명확성을 위해 색상이 지정되었다. 
+곱셈 연산 후, 결과의 첫 번째 모드는 데이터의 타일이 되고, 결과의 두 번째 모드는 각 타일을 반복한다.
+
+B를 변경함으로써 곱셈 결과 내 타일의 수와 순서를 바꿀 수 있다.
+B를 `(4,2):(2,1)`로 변경하면 다음과 같이 된다.
+
+![product2](https://img.buidl.day/blog/cute-dsl-layout-algebra-product2.png)
+
+### 논리적 곱 2차원 예시
+
+divide와 마찬가지로 tiler 모드별 전략을 사용하여 다차원 곱을 작성할 수도 있다.
+
+![product2d](https://img.buidl.day/blog/cute-dsl-layout-algebra-product2d.png)
+
+위 이미지는 `tiler`를 사용하여 `logical_product`를 모드별로 적용하는 방법을 보여준다. 
+이것이 권장되는 방식은 아니지만, 결과는 2x5 행 우선(row-major) 블록이 3x4 열 우선(column-major) 배열로 타일링된 랭크-2 레이아웃이 된다.
+
+이 방식이 권장되지 않는 이유는 위 식의 `tiler B`가 매우 직관적이지 않기 때문이다. 
+실제로 이를 구성하려면 A의 shape와 stride에 대한 완벽한 정보가 필요하다. 
+우리는 A와 B를 독립적으로 유지하면서 훨씬 더 직관적인 방식으로 "레이아웃 B에 따라 레이아웃 A를 타일링하라"는 표현을 구현하고자 한다.
+
+### Blocked 및 Raked 곱
+
+`blocked_product(LayoutA, LayoutB)`와 `raked_product(LayoutA, LayoutB)`는 1차원 `logical_product`를 기반으로 하는 랭크 민감형(rank-sensitive) 변환으로, 우리가 가장 자주 표현하고자 하는 직관적인 Layout 곱을 표현할 수 있게 해준다.
+이러한 함수들을 구현할 때 핵심적인 관찰 사항은 logical_product 의 호환성 사후 조건(post-conditions)이다.
+
+```
+// @post rank(result) == 2
+// @post compatible(layout_a, layout<0>(result))
+// @post compatible(layout_b, layout<1>(result))
+```
+
+`A`는 항상 결과의 0번 모드와 호환되고 `B`는 항상 결과의 1번 모드와 호환되기 때문에, 만약 `A`와 `B`를 동일한 랭크로 만든다면 곱 연산 이후에 유사한 모드들끼리 "재결합(reassociate)"할 수 있다. 
+즉, `A`의 "열(column)" 모드를 `B`의 "열" 모드와 결합할 수 있고, `A`의 "행(row)" 모드를 `B`의 "행" 모드와 결합할 수 있는 식입니다.
+
+이것이 바로 `blocked_product`와 `raked_product`가 수행하는 작업이며, 이들을 랭크 민감형(rank-sensitive)이라고 부르는 이유이다. 
+`Layout` 인수를 받는 다른 CuTe 함수들과 달리, 이들은 `logical_product` 이후에 각 모드가 다시 결합될 수 있도록 인수의 최상위 랭크를 고려한다.
+
+#### blocked product
+
+![productblocked2d](https://img.buidl.day/blog/cute-dsl-layout-algebra-productblocked2d.png)
+
+위 이미지는 tiler 방식과 동일한 결과를 보여주지만, 훨씬 더 직관적인 인수를 사용한다. 
+2x5 행 우선 레이아웃이 3x4 열 우선 배열 내의 타일로 배치되었다.
+또한 `blocked_product`는 `coalesced` 모드-0을 처리했다는 점에 유의하십시오.
+
+#### raked product
+
+![productraked2d](https://img.buidl.day/blog/cute-dsl-layout-algebra-productraked2d.png)
+
+마찬가지로, `raked_product`는 모드들을 약간 다르게 결합한다. 
+결과물인 "열" 모드가 A "열" 모드 다음에 B "열" 모드가 오는 방식으로 구성되는 대신, 결과물인 "열" 모드는 B "열" 모드 다음에 A "열" 모드가 오는 방식으로 구성된다.
+그 결과 "타일" A가 블록 형태로 나타나는 대신 "타일의 레이아웃(layout-of-tiles)" B와 교차 배치되거나 "레이크(raked)"된다.
+다른 자료에서는 이를 "순환 분포(cyclic distribution)"라고 부르기도 한다.
+
+### Zipped and Tiled Products
+
+`zipped_divide` 및 `tiled_divide`와 유사하게, `zipped_product` 및 `tiled_product`는 모드별 `logical_product`의 결과로 생성된 모드들을 단순히 재배열한다.
+
+```
+Layout Shape : (M, N, L, ...)
+Tiler Shape  : <TileM, TileN>
+
+logical_product : ((M,TileM), (N,TileN), L, ...)
+zipped_product  : ((M,N), (TileM,TileN,L,...))
+tiled_product   : ((M,N), TileM, TileN, L, ...)
+flat_product    : (M, N, TileM, TileN, L, ...)
+```
 
 
 ### 참고 문헌
-- [CuTe Layout](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/01_layout.html)
-- [CuTe Layout Algebra](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/02_layout_algebra.html)
+- [CuTe Layout 공식문서](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/01_layout.html)
+- [CuTe Layout Algebra 공식문서](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/02_layout_algebra.html)
+- [CuTe Layout Algebra - Lei Mao](https://leimao.github.io/article/CuTe-Layout-Algebra/)
